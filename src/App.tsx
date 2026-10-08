@@ -1,4 +1,4 @@
-import { motion } from 'framer-motion'
+import { AnimatePresence, motion } from 'framer-motion'
 import {
   ArrowRight,
   BarChart3,
@@ -8,24 +8,38 @@ import {
   CircleDollarSign,
   Compass,
   Copy,
-  Flame,
+  FileImage,
   FolderCog,
+  Gauge,
   Home,
   MessageSquare,
   Network,
-  Plus,
   Search,
   Settings,
   ShieldCheck,
   Sparkles,
-  Star,
   TrendingUp,
   User,
   Wallet2,
   Zap
 } from 'lucide-react'
+import { useState, type ReactNode } from 'react'
 import { NavLink, Route, Routes } from 'react-router-dom'
-import type { ReactNode } from 'react'
+
+type TransactionState = 'Preparing' | 'Signing' | 'Submitted' | 'Confirmed'
+type TradeSide = 'Buy' | 'Sell'
+
+type Trader = {
+  name: string
+  roi: string
+  pnl: string
+  winRate: string
+  drawdown: string
+  trades: string
+  copiers: string
+  risk: string
+  followers: string
+}
 
 const navItems = [
   { label: 'Home', to: '/', icon: Home },
@@ -51,7 +65,6 @@ const posts = [
     wallet: '0x7A9...E3F4',
     time: '2m ago',
     text: '$MON breakout above resistance. Watching the 0.85–0.90 range. Entry: $0.87 Target: $1.02 Stop: $0.82 Risk/reward: 3.0',
-    chart: [32, 36, 30, 40, 38, 44, 47, 52, 58, 60, 64, 70],
     token: 'MON',
     entry: '$0.87',
     current: '$0.94',
@@ -67,7 +80,6 @@ const posts = [
     wallet: '0xF1A...B922',
     time: '18m ago',
     text: 'Liquidity sweep pattern on $SOL. Waiting for reclaim of prior VWAP before adding. Trend remains intact.',
-    chart: [54, 52, 58, 60, 62, 64, 59, 63, 68, 71, 75, 78],
     token: 'SOL',
     entry: '$142.80',
     current: '$146.10',
@@ -83,7 +95,6 @@ const posts = [
     wallet: '0xC4F...96B1',
     time: '1h ago',
     text: 'Mean reversion at key support on $ARB. Risk is low if macro stays stable. Scale in on confirmation.',
-    chart: [38, 41, 43, 42, 39, 35, 37, 34, 32, 30, 33, 36],
     token: 'ARB',
     entry: '$0.92',
     current: '$0.88',
@@ -94,14 +105,13 @@ const posts = [
   }
 ]
 
-const trendingTraders = [
-  { name: 'Alpha King', roi: '+42.8%', pnl: '$12.4k', winRate: '71%', followers: '18.2k', risk: 'Medium' },
-  { name: 'Nova Flow', roi: '+31.4%', pnl: '$9.8k', winRate: '68%', followers: '12.4k', risk: 'Low' },
-  { name: 'Mantis Vault', roi: '+27.9%', pnl: '$8.1k', winRate: '66%', followers: '10.6k', risk: 'Medium' },
-  { name: 'OnchainJade', roi: '+24.6%', pnl: '$7.2k', winRate: '64%', followers: '9.1k', risk: 'High' }
+const traders: Trader[] = [
+  { name: '@alpha_king', roi: '+42.8%', pnl: '$12,420', winRate: '71%', drawdown: '8.2%', trades: '278', copiers: '438', risk: 'Medium', followers: '18.2k' },
+  { name: '@nova_flow', roi: '+31.4%', pnl: '$9,870', winRate: '68%', drawdown: '9.5%', trades: '192', copiers: '301', risk: 'Low', followers: '12.4k' },
+  { name: '@onchainjade', roi: '+27.9%', pnl: '$8,240', winRate: '66%', drawdown: '10.1%', trades: '161', copiers: '225', risk: 'Medium', followers: '9.3k' }
 ]
 
-const strategies = [
+const strategyCards = [
   { name: 'MON Momentum Breakout', roi: '+31.4%', winRate: '68%', drawdown: '9.7%', trades: '143', risk: 'Medium' },
   { name: 'Liquidity Sweep', roi: '+24.9%', winRate: '63%', drawdown: '11.1%', trades: '118', risk: 'High' },
   { name: 'DCA Smart Accumulation', roi: '+18.7%', winRate: '61%', drawdown: '7.1%', trades: '264', risk: 'Low' }
@@ -111,12 +121,6 @@ const tokenCards = [
   { symbol: 'MON', price: '$0.94', change: '+6.8%', volume: '$76.2M', social: 'High' },
   { symbol: 'SOL', price: '$146.10', change: '+2.4%', volume: '$1.1B', social: 'Very High' },
   { symbol: 'BTC', price: '$62,410', change: '+1.7%', volume: '$4.2B', social: 'High' }
-]
-
-const copyTraders = [
-  { name: '@alpha_king', roi: '+42.8%', pnl: '$12,420', winRate: '71%', drawdown: '8.2%', trades: '278', copiers: '438', risk: 'Medium' },
-  { name: '@nova_flow', roi: '+31.4%', pnl: '$9,870', winRate: '68%', drawdown: '9.5%', trades: '192', copiers: '301', risk: 'Low' },
-  { name: '@onchainjade', roi: '+27.9%', pnl: '$8,240', winRate: '66%', drawdown: '10.1%', trades: '161', copiers: '225', risk: 'Medium' }
 ]
 
 const automationTemplates = [
@@ -133,9 +137,24 @@ const orderBook = [
   { price: '0.9156', size: '3.40', side: 'sell' }
 ]
 
+const transactionFlow: TransactionState[] = ['Preparing', 'Signing', 'Submitted', 'Confirmed']
+
 function App() {
+  const [selectedFilter, setSelectedFilter] = useState(filters[0])
+  const [copyTraderModalOpen, setCopyTraderModalOpen] = useState(false)
+  const [tradeSide, setTradeSide] = useState<TradeSide>('Buy')
+  const [transactionState, setTransactionState] = useState<TransactionState>('Preparing')
+  const [automationEnabled, setAutomationEnabled] = useState(true)
+  const [aiPrompt, setAiPrompt] = useState('MON is forming a breakout structure above prior resistance. Identify the strongest continuation setup and risk controls.')
+
   return (
     <div className="min-h-screen bg-bg text-text">
+      <AnimatePresence>
+        {copyTraderModalOpen && (
+          <CopyTraderModal onClose={() => setCopyTraderModalOpen(false)} />
+        )}
+      </AnimatePresence>
+
       <div className="mx-auto flex min-h-screen max-w-[1800px] gap-4 p-4">
         <aside className="card-surface sticky top-4 hidden h-[calc(100vh-2rem)] w-[260px] flex-col rounded-2xl p-4 lg:flex">
           <div className="flex items-center gap-3 px-2 pb-4 pt-2">
@@ -221,17 +240,17 @@ function App() {
           </header>
 
           <Routes>
-            <Route path="/" element={<HomePage />} />
+            <Route path="/" element={<HomePage selectedFilter={selectedFilter} setSelectedFilter={setSelectedFilter} />} />
             <Route path="/explore" element={<ExplorePage />} />
             <Route path="/following" element={<FollowingPage />} />
-            <Route path="/trade" element={<TradingTerminalPage />} />
-            <Route path="/copy-trading" element={<CopyTradingPage />} />
+            <Route path="/trade" element={<TradingTerminalPage tradeSide={tradeSide} setTradeSide={setTradeSide} transactionState={transactionState} setTransactionState={setTransactionState} />} />
+            <Route path="/copy-trading" element={<CopyTradingPage openCopyModal={() => setCopyTraderModalOpen(true)} />} />
             <Route path="/strategies" element={<StrategiesPage />} />
-            <Route path="/automations" element={<AutomationPage />} />
-            <Route path="/ai-lab" element={<AILabPage />} />
+            <Route path="/automations" element={<AutomationPage automationEnabled={automationEnabled} setAutomationEnabled={setAutomationEnabled} />} />
+            <Route path="/ai-lab" element={<AILabPage aiPrompt={aiPrompt} setAiPrompt={setAiPrompt} />} />
             <Route path="/notifications" element={<NotificationsPage />} />
             <Route path="/bookmarks" element={<BookmarksPage />} />
-            <Route path="/profile" element={<ProfilePage />} />
+            <Route path="/profile" element={<ProfilePage openCopyModal={() => setCopyTraderModalOpen(true)} />} />
           </Routes>
         </main>
       </div>
@@ -239,15 +258,16 @@ function App() {
   )
 }
 
-function HomePage() {
+function HomePage({ selectedFilter, setSelectedFilter }: { selectedFilter: string; setSelectedFilter: (f: string) => void }) {
   return (
     <div className="space-y-6">
       <div className="flex flex-wrap gap-2">
-        {filters.map((filter, index) => (
+        {filters.map((filter) => (
           <button
             key={filter}
+            onClick={() => setSelectedFilter(filter)}
             className={`rounded-full border px-3 py-1.5 text-xs transition ${
-              index === 0
+              selectedFilter === filter
                 ? 'border-green/20 bg-green/10 text-green'
                 : 'border-white/10 bg-white/3 text-subtext hover:text-text'
             }`}
@@ -267,11 +287,11 @@ function HomePage() {
         <div className="space-y-4">
           <Panel title="Trending Traders" action="View all">
             <div className="space-y-3">
-              {trendingTraders.map((trader, index) => (
+              {traders.map((trader) => (
                 <div key={trader.name} className="flex items-center justify-between rounded-xl border border-white/10 bg-white/3 p-3">
                   <div className="flex items-center gap-3">
                     <div className="flex h-9 w-9 items-center justify-center rounded-full bg-gradient-to-br from-green/30 to-blue/30 text-xs font-semibold text-text">
-                      {trader.name.slice(0, 2).toUpperCase()}
+                      {trader.name.slice(1, 3).toUpperCase()}
                     </div>
                     <div>
                       <div className="text-sm font-medium">{trader.name}</div>
@@ -289,16 +309,16 @@ function HomePage() {
 
           <Panel title="Trending Strategies" action="Explore">
             <div className="space-y-3">
-              {strategies.map((strategy) => (
+              {strategyCards.map((strategy) => (
                 <div key={strategy.name} className="rounded-xl border border-white/10 bg-white/3 p-3">
                   <div className="flex items-center justify-between">
                     <div className="text-sm font-medium">{strategy.name}</div>
                     <span className="rounded-full bg-blue/10 px-2 py-0.5 text-[10px] font-medium text-blue">{strategy.risk}</span>
                   </div>
                   <div className="mt-2 grid grid-cols-3 gap-2 text-[11px] text-subtext">
-                    <div><span className="text-text">ROI</span><br/>{strategy.roi}</div>
-                    <div><span className="text-text">Win</span><br/>{strategy.winRate}</div>
-                    <div><span className="text-text">Trades</span><br/>{strategy.trades}</div>
+                    <div><span className="text-text">ROI</span><br />{strategy.roi}</div>
+                    <div><span className="text-text">Win</span><br />{strategy.winRate}</div>
+                    <div><span className="text-text">Trades</span><br />{strategy.trades}</div>
                   </div>
                 </div>
               ))}
@@ -333,13 +353,13 @@ function ExplorePage() {
 
         <Panel title="Trending Posts" action="Live">
           <div className="space-y-3">
-            {posts.slice(0, 3).map((post) => (
+            {posts.map((post) => (
               <div key={post.id} className="rounded-xl border border-white/10 bg-white/3 p-3">
                 <div className="flex items-center justify-between">
                   <div className="text-sm font-medium">{post.user}</div>
                   <span className="text-[11px] text-subtext">{post.time}</span>
                 </div>
-                <div className="mt-2 text-sm text-subtext line-clamp-3">{post.text}</div>
+                <div className="mt-2 text-sm text-subtext">{post.text}</div>
                 <div className="mt-2 flex items-center gap-2 text-[11px] text-green">
                   <TrendingUp size={12} />
                   {post.pnl} on {post.token}
@@ -351,7 +371,7 @@ function ExplorePage() {
 
         <Panel title="Trending Strategies" action="Catalog">
           <div className="space-y-3">
-            {strategies.map((strategy) => (
+            {strategyCards.map((strategy) => (
               <div key={strategy.name} className="rounded-xl border border-white/10 bg-white/3 p-3">
                 <div className="text-sm font-medium">{strategy.name}</div>
                 <div className="mt-2 flex justify-between text-[11px] text-subtext">
@@ -383,11 +403,13 @@ function FollowingPage() {
       </div>
 
       <div className="grid gap-4 lg:grid-cols-2">
-        {trendingTraders.map((trader) => (
+        {traders.map((trader) => (
           <div key={trader.name} className="card-surface rounded-2xl p-4">
             <div className="flex items-center justify-between">
               <div className="flex items-center gap-3">
-                <div className="flex h-11 w-11 items-center justify-center rounded-full bg-green/10 text-sm font-semibold text-green">{trader.name.slice(0, 2).toUpperCase()}</div>
+                <div className="flex h-11 w-11 items-center justify-center rounded-full bg-green/10 text-sm font-semibold text-green">
+                  {trader.name.slice(1, 3).toUpperCase()}
+                </div>
                 <div>
                   <div className="font-medium">{trader.name}</div>
                   <div className="text-xs text-subtext">{trader.followers} followers</div>
@@ -407,7 +429,17 @@ function FollowingPage() {
   )
 }
 
-function TradingTerminalPage() {
+function TradingTerminalPage({
+  tradeSide,
+  setTradeSide,
+  transactionState,
+  setTransactionState
+}: {
+  tradeSide: TradeSide
+  setTradeSide: (side: TradeSide) => void
+  transactionState: TransactionState
+  setTransactionState: (state: TransactionState) => void
+}) {
   return (
     <div className="space-y-6">
       <div className="flex items-center justify-between gap-4">
@@ -416,9 +448,18 @@ function TradingTerminalPage() {
           <div className="text-sm text-subtext">Spot · Kuru order book</div>
         </div>
         <div className="flex items-center gap-2">
-          <button className="rounded-full border border-white/10 bg-white/3 px-3 py-1.5 text-xs text-subtext">1D</button>
-          <button className="rounded-full border border-green/20 bg-green/10 px-3 py-1.5 text-xs text-green">4H</button>
-          <button className="rounded-full border border-white/10 bg-white/3 px-3 py-1.5 text-xs text-subtext">1H</button>
+          {['1D', '4H', '1H'].map((tf) => (
+            <button
+              key={tf}
+              className={`rounded-full border px-3 py-1.5 text-xs ${
+                tf === '4H'
+                  ? 'border-green/20 bg-green/10 text-green'
+                  : 'border-white/10 bg-white/3 text-subtext'
+              }`}
+            >
+              {tf}
+            </button>
+          ))}
         </div>
       </div>
 
@@ -440,12 +481,6 @@ function TradingTerminalPage() {
 
           <div className="grid-bg flex h-[420px] items-end overflow-hidden rounded-2xl border border-white/10 bg-[#0b1217] p-4">
             <svg viewBox="0 0 700 260" className="h-full w-full">
-              <defs>
-                <linearGradient id="chartGlow" x1="0" x2="0" y1="0" y2="1">
-                  <stop offset="0%" stopColor="rgba(52, 211, 153, 0.4)" />
-                  <stop offset="100%" stopColor="rgba(52, 211, 153, 0)" />
-                </linearGradient>
-              </defs>
               <path d="M0 150 C 80 120, 100 170, 160 140 S 260 70, 330 90 S 420 120, 500 106 S 620 80, 700 45 L700 260 L0 260 Z" className="chart-fill" />
               <path d="M0 150 C 80 120, 100 170, 160 140 S 260 70, 330 90 S 420 120, 500 106 S 620 80, 700 45" className="chart-line" />
             </svg>
@@ -483,8 +518,21 @@ function TradingTerminalPage() {
 
           <div className="card-surface rounded-2xl p-4">
             <div className="mb-3 flex gap-2">
-              <button className="rounded-lg bg-red/10 px-3 py-2 text-xs font-medium text-red">Sell</button>
-              <button className="rounded-lg bg-green/10 px-3 py-2 text-xs font-medium text-green">Buy</button>
+              {(['Buy', 'Sell'] as TradeSide[]).map((side) => (
+                <button
+                  key={side}
+                  onClick={() => setTradeSide(side)}
+                  className={`rounded-lg px-3 py-2 text-xs font-medium ${
+                    side === tradeSide
+                      ? side === 'Buy'
+                        ? 'bg-green/10 text-green'
+                        : 'bg-red/10 text-red'
+                      : 'bg-white/3 text-subtext'
+                  }`}
+                >
+                  {side}
+                </button>
+              ))}
             </div>
 
             <div className="space-y-3 text-sm">
@@ -508,7 +556,30 @@ function TradingTerminalPage() {
               <div className="flex justify-between"><span>Slippage</span><span className="text-text">0.25%</span></div>
             </div>
 
-            <button className="mt-4 w-full rounded-xl bg-green px-4 py-3 text-sm font-semibold text-slate-950">Execute Trade</button>
+            <button
+              className="mt-4 w-full rounded-xl bg-green px-4 py-3 text-sm font-semibold text-slate-950"
+              onClick={() => setTransactionState('Preparing')}
+            >
+              Execute Trade
+            </button>
+
+            <div className="mt-4 rounded-xl border border-white/10 bg-white/3 p-3">
+              <div className="mb-2 text-[11px] uppercase tracking-[0.14em] text-subtext">Transaction status</div>
+              <div className="flex flex-wrap gap-2">
+                {transactionFlow.map((step) => (
+                  <span
+                    key={step}
+                    className={`rounded-full border px-2 py-1 text-[10px] ${
+                      step === transactionState
+                        ? 'border-green/30 bg-green/10 text-green'
+                        : 'border-white/10 bg-white/5 text-subtext'
+                    }`}
+                  >
+                    {step}
+                  </span>
+                ))}
+              </div>
+            </div>
           </div>
         </div>
       </div>
@@ -516,7 +587,7 @@ function TradingTerminalPage() {
   )
 }
 
-function CopyTradingPage() {
+function CopyTradingPage({ openCopyModal }: { openCopyModal: () => void }) {
   return (
     <div className="space-y-6">
       <div className="flex items-center justify-between">
@@ -528,11 +599,13 @@ function CopyTradingPage() {
       </div>
 
       <div className="grid gap-4 lg:grid-cols-3">
-        {copyTraders.map((trader) => (
+        {traders.map((trader) => (
           <div key={trader.name} className="card-surface rounded-2xl p-4">
             <div className="flex items-center justify-between">
               <div className="flex items-center gap-3">
-                <div className="flex h-10 w-10 items-center justify-center rounded-full bg-gradient-to-br from-blue/30 to-green/20 text-xs font-bold">{trader.name.slice(1, 3).toUpperCase()}</div>
+                <div className="flex h-10 w-10 items-center justify-center rounded-full bg-gradient-to-br from-blue/30 to-green/20 text-xs font-bold">
+                  {trader.name.slice(1, 3).toUpperCase()}
+                </div>
                 <div>
                   <div className="text-sm font-medium">{trader.name}</div>
                   <div className="text-[11px] text-subtext">{trader.copiers} copiers</div>
@@ -550,7 +623,7 @@ function CopyTradingPage() {
 
             <div className="mt-4 flex gap-2">
               <button className="flex-1 rounded-xl border border-white/10 bg-white/3 px-3 py-2 text-sm">View profile</button>
-              <button className="flex-1 rounded-xl bg-green px-3 py-2 text-sm font-medium text-slate-950">Copy trader</button>
+              <button onClick={openCopyModal} className="flex-1 rounded-xl bg-green px-3 py-2 text-sm font-medium text-slate-950">Copy trader</button>
             </div>
           </div>
         ))}
@@ -563,7 +636,7 @@ function StrategiesPage() {
   return (
     <div className="space-y-6">
       <div className="grid gap-4 lg:grid-cols-3">
-        {strategies.map((strategy) => (
+        {strategyCards.map((strategy) => (
           <div key={strategy.name} className="card-surface rounded-2xl p-4">
             <div className="flex items-start justify-between">
               <div>
@@ -591,19 +664,26 @@ function StrategiesPage() {
   )
 }
 
-function AutomationPage() {
+function AutomationPage({ automationEnabled, setAutomationEnabled }: { automationEnabled: boolean; setAutomationEnabled: (v: boolean) => void }) {
   return (
     <div className="space-y-6">
       <div className="grid gap-4 xl:grid-cols-[1.1fr_0.9fr]">
         <div className="card-surface rounded-2xl p-4">
           <div className="mb-4 flex items-center justify-between">
             <div className="text-xl font-semibold">Workflow builder</div>
-            <button className="rounded-xl border border-green/20 bg-green/10 px-3 py-1.5 text-xs text-green">Enable</button>
+            <button
+              onClick={() => setAutomationEnabled(!automationEnabled)}
+              className={`rounded-xl border px-3 py-1.5 text-xs ${
+                automationEnabled ? 'border-green/20 bg-green/10 text-green' : 'border-white/10 bg-white/3 text-subtext'
+              }`}
+            >
+              {automationEnabled ? 'Enabled' : 'Disabled'}
+            </button>
           </div>
 
           <div className="space-y-4">
             <Stepper label="Trigger" value="MON price crosses above $1.20" />
-            <Stepper label="Condition" value="Volume > $2M and RSI > 60" />
+            <Stepper label="Condition" value="Volume > $2M AND RSI > 60" />
             <Stepper label="Action" value="Execute Buy Order using Kuru" />
             <Stepper label="Risk control" value="Max 1 execution / day, limit 15% per trade" />
           </div>
@@ -631,7 +711,7 @@ function AutomationPage() {
   )
 }
 
-function AILabPage() {
+function AILabPage({ aiPrompt, setAiPrompt }: { aiPrompt: string; setAiPrompt: (v: string) => void }) {
   return (
     <div className="space-y-6">
       <div className="grid gap-4 xl:grid-cols-[1fr_0.8fr]">
@@ -641,6 +721,8 @@ function AILabPage() {
             <UploadBox title="Chart screenshot" />
             <UploadBox title="Trading screenshot" />
             <textarea
+              value={aiPrompt}
+              onChange={(e) => setAiPrompt(e.target.value)}
               className="min-h-[120px] w-full rounded-xl border border-white/10 bg-white/3 p-3 text-sm text-text placeholder:text-subtext focus:outline-none"
               placeholder="Paste a trade idea, strategy, or ask a question..."
             />
@@ -669,7 +751,7 @@ function NotificationsPage() {
   return (
     <div className="space-y-4">
       <div className="text-2xl font-semibold">Notifications</div>
-      {[1,2,3].map((item) => (
+      {[1, 2, 3].map((item) => (
         <div key={item} className="card-surface rounded-2xl p-4">
           <div className="flex items-center justify-between">
             <div className="flex items-center gap-3">
@@ -691,14 +773,14 @@ function BookmarksPage() {
   return (
     <div className="space-y-4">
       <div className="text-2xl font-semibold">Bookmarks</div>
-      {posts.slice(0,2).map((post) => (
-        <PostCard key={post.id} {...post} compact />
+      {posts.slice(0, 2).map((post) => (
+        <PostCard key={post.id} {...post} />
       ))}
     </div>
   )
 }
 
-function ProfilePage() {
+function ProfilePage({ openCopyModal }: { openCopyModal: () => void }) {
   return (
     <div className="space-y-6">
       <div className="card-surface rounded-2xl p-5">
@@ -716,7 +798,7 @@ function ProfilePage() {
 
           <div className="flex gap-2">
             <button className="rounded-xl border border-white/10 bg-white/3 px-4 py-2 text-sm">Follow</button>
-            <button className="rounded-xl bg-green px-4 py-2 text-sm font-medium text-slate-950">Copy Trader</button>
+            <button onClick={openCopyModal} className="rounded-xl bg-green px-4 py-2 text-sm font-medium text-slate-950">Copy Trader</button>
           </div>
         </div>
 
@@ -741,7 +823,7 @@ function ProfilePage() {
 
           <div className="space-y-4">
             {posts.map((post) => (
-              <PostCard key={post.id} {...post} compact />
+              <PostCard key={post.id} {...post} />
             ))}
           </div>
         </div>
@@ -755,6 +837,7 @@ function ProfilePage() {
               <div className="flex justify-between"><span>Risk</span><span>Medium</span></div>
             </div>
           </Panel>
+
           <Panel title="Recent strategies" action="See all">
             <div className="space-y-2">
               {['MON Breakout', 'Momentum Scalping', 'Mean Reversion'].map((item) => (
@@ -768,27 +851,32 @@ function ProfilePage() {
   )
 }
 
-function PostCard({
-  user,
-  handle,
-  wallet,
-  time,
-  text,
-  chart,
-  token,
-  entry,
-  current,
-  pnl,
-  signal,
-  leverage,
-  tradeMode,
-  compact = false
-}: any) {
+function PostCard({ user, handle, wallet, time, text, token, entry, current, pnl, signal, leverage, tradeMode }: {
+  user: string
+  handle: string
+  wallet: string
+  time: string
+  text: string
+  token: string
+  entry: string
+  current: string
+  pnl: string
+  signal: string
+  leverage: string
+  tradeMode: string
+}) {
   return (
-    <article className="card-surface rounded-2xl p-4">
+    <motion.article
+      initial={{ opacity: 0, y: 12 }}
+      animate={{ opacity: 1, y: 0 }}
+      transition={{ duration: 0.25 }}
+      className="card-surface rounded-2xl p-4"
+    >
       <div className="flex items-start justify-between gap-3">
         <div className="flex items-center gap-3">
-          <div className="flex h-11 w-11 items-center justify-center rounded-full bg-gradient-to-br from-green/20 to-blue/20 text-sm font-semibold">{user.slice(0, 2).toUpperCase()}</div>
+          <div className="flex h-11 w-11 items-center justify-center rounded-full bg-gradient-to-br from-green/20 to-blue/20 text-sm font-semibold">
+            {user.slice(0, 2).toUpperCase()}
+          </div>
           <div>
             <div className="flex items-center gap-2">
               <span className="font-medium">{user}</span>
@@ -813,6 +901,7 @@ function PostCard({
           </div>
           <div className="text-xs text-subtext">{tradeMode}</div>
         </div>
+
         <div className="grid grid-cols-4 gap-2 text-xs">
           <div className="rounded-lg bg-white/3 p-2"><div className="text-subtext">Entry</div><div className="mt-1 font-medium text-text">{entry}</div></div>
           <div className="rounded-lg bg-white/3 p-2"><div className="text-subtext">Current</div><div className="mt-1 font-medium text-text">{current}</div></div>
@@ -822,7 +911,7 @@ function PostCard({
 
         <div className="mt-3 h-20 overflow-hidden rounded-xl border border-white/10 bg-black/20">
           <svg viewBox="0 0 400 80" className="h-full w-full">
-            <path d={`M0 50 C 30 35, 50 40, 90 45 S 150 20, 200 32 S 280 15, 330 22 S 360 12, 400 10`} className="chart-line" />
+            <path d="M0 50 C 30 35, 50 40, 90 45 S 150 20, 200 32 S 280 15, 330 22 S 360 12, 400 10" className="chart-line" />
           </svg>
         </div>
       </div>
@@ -834,7 +923,7 @@ function PostCard({
         <button className="flex items-center gap-1.5 hover:text-text"><ArrowRight size={15} /> Share</button>
         <button className="rounded-xl bg-green px-3 py-2 text-sm font-medium text-slate-950">Copy Trade</button>
       </div>
-    </article>
+    </motion.article>
   )
 }
 
@@ -864,7 +953,9 @@ function UploadBox({ title }: { title: string }) {
     <div className="rounded-xl border border-dashed border-white/10 bg-white/3 p-4 text-sm text-subtext">
       <div className="flex items-center justify-between">
         <span>{title}</span>
-        <button className="rounded-lg border border-white/10 bg-white/3 px-2 py-1 text-[11px]">Upload</button>
+        <button className="inline-flex items-center gap-2 rounded-lg border border-white/10 bg-white/3 px-2 py-1 text-[11px]">
+          <FileImage size={12} /> Upload
+        </button>
       </div>
     </div>
   )
@@ -884,6 +975,62 @@ function TabButton({ active = false, children }: { active?: boolean; children: R
     <button className={`rounded-xl px-3 py-1.5 text-xs ${active ? 'bg-white/8 text-text' : 'text-subtext'}`}>
       {children}
     </button>
+  )
+}
+
+function CopyTraderModal({ onClose }: { onClose: () => void }) {
+  return (
+    <motion.div
+      initial={{ opacity: 0 }}
+      animate={{ opacity: 1 }}
+      exit={{ opacity: 0 }}
+      className="fixed inset-0 z-50 flex items-center justify-center bg-black/70 p-4 backdrop-blur-sm"
+      onClick={onClose}
+    >
+      <motion.div
+        initial={{ opacity: 0, y: 18, scale: 0.98 }}
+        animate={{ opacity: 1, y: 0, scale: 1 }}
+        exit={{ opacity: 0, y: 18, scale: 0.98 }}
+        transition={{ duration: 0.2 }}
+        onClick={(e) => e.stopPropagation()}
+        className="card-surface w-full max-w-xl rounded-2xl p-5"
+      >
+        <div className="flex items-center justify-between">
+          <div>
+            <div className="text-xl font-semibold">Copy trader</div>
+            <div className="text-sm text-subtext">@alpha_king · Risk profile: Medium</div>
+          </div>
+          <button onClick={onClose} className="rounded-xl border border-white/10 bg-white/3 px-2 py-1 text-sm">Close</button>
+        </div>
+
+        <div className="mt-5 grid gap-4 md:grid-cols-2">
+          <Field label="Capital allocation" value="$1,000" />
+          <Field label="Max trade size" value="$250" />
+          <Field label="Max daily loss" value="2.5%" />
+          <Field label="Stop copying after drawdown" value="12%" />
+          <Field label="Copy percentage" value="75%" />
+          <Field label="Slippage tolerance" value="0.35%" />
+        </div>
+
+        <div className="mt-5 rounded-xl border border-white/10 bg-white/3 p-3 text-sm text-subtext">
+          Important: copying a trader does not guarantee performance. This strategy can lose capital, and execution depends on market conditions, account settings, and approval of your wallet.
+        </div>
+
+        <div className="mt-5 flex justify-end gap-2">
+          <button onClick={onClose} className="rounded-xl border border-white/10 bg-white/3 px-4 py-2 text-sm">Cancel</button>
+          <button onClick={onClose} className="rounded-xl bg-green px-4 py-2 text-sm font-medium text-slate-950">Confirm Copy</button>
+        </div>
+      </motion.div>
+    </motion.div>
+  )
+}
+
+function Field({ label, value }: { label: string; value: string }) {
+  return (
+    <div className="rounded-xl border border-white/10 bg-white/3 p-3">
+      <div className="text-[11px] uppercase tracking-[0.14em] text-subtext">{label}</div>
+      <div className="mt-2 text-sm font-medium text-text">{value}</div>
+    </div>
   )
 }
 
